@@ -1,29 +1,5 @@
 import Order from "../models/Order.js";
-
-// Place a new order (User)
-// export const placeOrder = async (req, res) => {
-//   try {
-//     const userId = req.params.userId;
-//     const orderData = req.body;
-
-//     if (!orderData.items || orderData.items.length === 0) {
-//       return res.status(400).json({ success: false, message: "Order must include at least one item" });
-//     }
-
-//     const newOrder = new Order({
-//       ...orderData,
-//       userId,
-//       orderNumber: `ORD-${Date.now()}`
-//     });
-
-//     const savedOrder = await newOrder.save();
-//     res.status(201).json({ success: true, order: savedOrder });
-//   } catch (error) {
-//     console.error("Place Order Error:", error);
-//     res.status(500).json({ success: false, message: "Failed to place order", error: error.message });
-//   }
-// };
-// controllers/Order.js
+import mongoose from "mongoose";
 export const placeOrder = async (req, res) => {
   try {
     const userId = req.params.userId;
@@ -37,21 +13,29 @@ export const placeOrder = async (req, res) => {
       });
     }
 
-    if (!orderData.total) {
-      return res.status(400).json({ 
-        success: false, 
-        message: "Total amount is required" 
-      });
-    }
+    // Fetch complete product data for each item
+    const Product = mongoose.model('Product');
+    const itemsWithProductData = await Promise.all(
+      orderData.items.map(async (item) => {
+        const product = await Product.findById(item.productId);
+        return {
+          productId: item.productId,
+          title: product?.title || item.title,
+          quantity: item.quantity,
+          price: product?.price || item.price,
+          image: product?.image || null // Get image from product
+        };
+      })
+    );
 
-    // Create order number
     const orderNumber = `ORD-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
 
     const newOrder = new Order({
       ...orderData,
+      items: itemsWithProductData, // Use enriched items
       userId,
       orderNumber,
-      orderDate: new Date().toISOString(),
+      orderDate: new Date(),
       status: "confirmed"
     });
 
@@ -67,21 +51,60 @@ export const placeOrder = async (req, res) => {
     res.status(500).json({ 
       success: false, 
       message: "Failed to place order",
-      error: error.message,
-      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+      error: error.message
     });
   }
 };
-// Get all orders of a specific user (User)
-export const getUserOrders = async (req, res) => {
-  try {
-    const orders = await Order.find({ userId: req.params.userid }).sort({ createdAt: -1 });
-    res.status(200).json({ success: true, orders });
-  } catch (error) {
-    console.error("Get User Orders Error:", error);
-    res.status(500).json({ success: false, message: "Failed to fetch user orders", error: error.message });
-  }
-};
+// export const placeOrder = async (req, res) => {
+//   try {
+//     const userId = req.params.userId;
+//     const orderData = req.body;
+
+//     // Validate required fields
+//     if (!orderData.items || orderData.items.length === 0) {
+//       return res.status(400).json({ 
+//         success: false, 
+//         message: "Order must include at least one item" 
+//       });
+//     }
+
+//     if (!orderData.total) {
+//       return res.status(400).json({ 
+//         success: false, 
+//         message: "Total amount is required" 
+//       });
+//     }
+
+//     // Create order number
+//     const orderNumber = `ORD-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+
+//     const newOrder = new Order({
+//       ...orderData,
+//       userId,
+//       orderNumber,
+//       orderDate: new Date().toISOString(),
+//       status: "confirmed"
+//     });
+
+//     const savedOrder = await newOrder.save();
+    
+//     res.status(201).json({ 
+//       success: true, 
+//       message: "Order placed successfully",
+//       order: savedOrder 
+//     });
+//   } catch (error) {
+//     console.error("Place Order Error:", error);
+//     res.status(500).json({ 
+//       success: false, 
+//       message: "Failed to place order",
+//       error: error.message,
+//       stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+//     });
+//   }
+// };
+
+
 
 // Get order by ID (Admin or User - depends on middleware)
 export const getOrderById = async (req, res) => {
@@ -99,27 +122,7 @@ export const getOrderById = async (req, res) => {
   }
 };
 
-// Update order status (User updating their own order - e.g., cancel request)
-// export const updateOrderStatus = async (req, res) => {
-//   try {
-//     const { status } = req.body;
 
-//     const updatedOrder = await Order.findByIdAndUpdate(
-//       req.params.orderId,
-//       { status },
-//       { new: true }
-//     );
-
-//     if (!updatedOrder) {
-//       return res.status(404).json({ success: false, message: "Order not found" });
-//     }
-
-//     res.status(200).json({ success: true, message: "Order status updated", order: updatedOrder });
-//   } catch (error) {
-//     console.error("Update Order Status Error:", error);
-//     res.status(500).json({ success: false, message: "Failed to update order", error: error.message });
-//   }
-// };
 
 
 export const updateOrderStatus = async (req, res) => {
@@ -179,7 +182,7 @@ export const deleteOrder = async (req, res) => {
   }
 };
 
-// Get all orders (Admin)
+
 export const getAllOrders = async (req, res) => {
   try {
     const orders = await Order.find({}).sort({ createdAt: -1 });
@@ -189,3 +192,110 @@ export const getAllOrders = async (req, res) => {
     res.status(500).json({ success: false, message: "Failed to fetch all orders", error: error.message });
   }
 };
+export const getUserOrders = async (req, res) => {
+  try {
+    const { userId } = req.params;
+
+    const orders = await Order.find({ userId })
+      .populate({
+        path: 'items.productId',
+        select: 'title price image',
+        model: 'Product'
+      })
+      .sort({ createdAt: -1 })
+      .lean();
+
+    const formattedOrders = orders.map(order => ({
+      ...order,
+      items: order.items.map(item => ({
+        ...item,
+        // Use populated product data or fallback to order data
+        title: item.productId?.title || item.title,
+        price: item.productId?.price || item.price,
+        // Construct image URL if available
+        image: item.productId?.image 
+          ? `${req.protocol}://${req.get('host')}/uploads/${item.productId.image}`
+          : null
+      }))
+    }));
+
+    res.status(200).json({
+      success: true,
+      count: formattedOrders.length,
+      orders: formattedOrders
+    });
+  } catch (error) {
+    console.error("Error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch orders"
+    });
+  }
+};
+// export const getUserOrders = async (req, res) => {
+//   try {
+//     const { userId } = req.params;
+
+//     if (!mongoose.Types.ObjectId.isValid(userId)) {
+//       return res.status(400).json({
+//         success: false,
+//         message: "Invalid user ID format",
+//       });
+//     }
+
+    
+//     const orders = await Order.find({ userId })
+//       .populate({
+//         path: 'items.productId',
+//         select: 'title price image', 
+//         model: 'Product' 
+//       })
+//       .sort({ createdAt: - 1})
+//       .lean();
+
+//     if (!orders || orders.length === 0) {
+//       return res.status(200).json({
+//         success: true,
+//         message: "No orders found for this user",
+//         orders: [],
+//       });
+//     }
+
+    
+//     const formattedOrders = orders.map((order) => ({
+//       id: order._id,
+//       orderNumber: order.orderNumber,
+//       date: order.orderDate || order.createdAt,
+//       status: order.status,
+//       total: order.total,
+//       items: order.items.map((item) => ({
+//         productId: item.productId?._id || item.productId,
+//         title: item.productId?.title || item.title,
+//         quantity: item.quantity,
+//         price: item.productId?.price || item.price,
+//         total: item.quantity * (item.productId?.price || item.price),
+        
+//         image: item.productId?.image 
+//           ? `${req.protocol}://${req.get('host')}/uploads/${item.productId.image}`
+//           : null
+//       })),
+//       shipping: order.shipping,
+//       payment: order.payment,
+//       createdAt: order.createdAt,
+//       updatedAt: order.updatedAt,
+//     }));
+
+//     res.status(200).json({
+//       success: true,
+//       count: formattedOrders.length,
+//       orders: formattedOrders,
+//     });
+//   } catch (error) {
+//     console.error("Error in getUserOrders:", error);
+//     res.status(500).json({
+//       success: false,
+//       message: "Failed to fetch user orders",
+//       error: process.env.NODE_ENV === "development" ? error.message : undefined,
+//     });
+//   }
+// };

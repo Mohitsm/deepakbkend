@@ -6,6 +6,7 @@ const orderItemSchema = new mongoose.Schema({
   title: { type: String, required: true },
   quantity: { type: Number, required: true },
   price: { type: Number, required: true },
+  image:{type:String, required:true},
 }, { _id: false });
 
 // Sub-schema for shipping details
