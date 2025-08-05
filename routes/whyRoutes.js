@@ -1,9 +1,18 @@
 import express from "express";
-import { addWhy, getAllWhys } from "../controllers/whyController.js";
+import {
+  addWhy,
+  getAllWhys,
+  getWhyById,
+  updateWhy,
+  deleteWhy
+} from "../controllers/whyController.js";
 
 const router = express.Router();
 
-router.post("/add", addWhy);
+router.post("/", addWhy);
 router.get("/", getAllWhys);
+router.get("/:id", getWhyById);
+router.put("/:id", updateWhy);
+router.delete("/:id", deleteWhy);
 
 export default router;
