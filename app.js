@@ -29,6 +29,7 @@ import userauthRouter from './routes/userauth.js';
 import orderRouter from './routes/orderRoutes.js'
 import upcomingRouter from './routes/upcomingRoutes.js';
 import messageRouter from './routes/messageRoutes.js';
+import whyRouter from './routes/whyRoutes.js';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 dotenv.config();
@@ -63,6 +64,7 @@ app.use('/api/userauth', userauthRouter);
 app.use('/api/orders', orderRouter);
 app.use('/api/upcoming', upcomingRouter);
 app.use('/api/message', messageRouter);
+app.use('/api/why', whyRouter);
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 
